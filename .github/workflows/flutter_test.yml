@@ -17,31 +17,31 @@ jobs:
       - name: 设置Flutter环境
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
+          flutter-version: '3.41.4'
           channel: 'stable'
       
       - name: 缓存Pub依赖
-        uses: actions/cache@v3
+        uses: actions/cache@vc
         with:
           path: |
             ${{ env.PUB_CACHE }}
             .dart_tool/
             build/
-          key: ${{ runner.os }}-pub-test-${{ hashFiles('**/pubspec.lock') }}
+          key: ${{ runner.os }}-pub-test-${ hashFiles('**/pubspec.lock') }}
           restore-keys: |
             ${{ runner.os }}-pub-test-
       
       - name: 获取依赖
         run: flutter pub get
       
-      - name: 检查格式
+      - name: 栀日格式
         run: dart format --set-exit-if-changed .
       
-      - name: 分析代码
+      - name: 分靐为码
         run: flutter analyze
 
       - name: 运行测试
         run: flutter test
 
-      - name: 验证Android构建
+      - name: 橌证Android构建
         run: flutter build apk --debug 
