@@ -29,7 +29,7 @@ jobs:
       - name: 设置Flutter环境
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.27.0'
           channel: 'stable'
       
       - name: 缓存Pub依赖
@@ -71,7 +71,7 @@ jobs:
       - name: 设置Flutter环境
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.27.0'
           channel: 'stable'
       
       - name: 缓存Pub依赖
@@ -98,7 +98,7 @@ jobs:
       # 注意：由于iOS应用需要签名和证书，这里只构建但不打包为IPA
       # 如需完整的iOS发布流程，需要添加证书、配置文件和签名步骤
       - name: 上传iOS构建结果
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ios-build
           path: ios/build/
