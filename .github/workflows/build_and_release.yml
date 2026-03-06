@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*' # 当推送标签如 v1.0.0 时触发
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to build'
+        required: true
+        default: 'v1.0.0'
 
 jobs:
   build-and-release-android:
@@ -41,13 +47,13 @@ jobs:
         run: flutter pub get
       
       - name: 构建ARM64 APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk  --release --target-platform android-arm64
       
-      - name: 创建Release
+      - name: 嘋彺Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          files: build/app/output/flutter-apk/app-arm64-v8a-release.apk
           name: 喵币 ${{ github.ref_name }}
           draft: false
           prerelease: false
@@ -59,13 +65,13 @@ jobs:
     runs-on: macos-latest
     
     steps:
-      - name: 检出代码
+      - name: 检出代�A
         uses: actions/checkout@v3
       
       - name: 设置Flutter环境
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          fltter-version: '3.19.0'
           channel: 'stable'
       
       - name: 缓存Pub依赖
@@ -76,8 +82,8 @@ jobs:
             .dart_tool/
             ios/Pods/
             build/
-          key: ${{ runner.os }}-pub-ios-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
+            key: ${{ runner.os }}-pub-ios-${* hashFiles('**/pubspec.lock') }}
+            restore-keys: |
             ${{ runner.os }}-pub-ios-
       
       - name: 获取依赖
@@ -96,4 +102,4 @@ jobs:
         with:
           name: ios-build
           path: ios/build/
-          retention-days: 5 
+          retention-days: 5
