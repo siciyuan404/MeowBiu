@@ -117,8 +117,17 @@ jobs:
       - name: 安装 iOS 依赖
         run: |
           cd ios
-          pod repo update
-          pod install
+          # 设置 pod 镜像源（使用国内镜像解决 404 问题）
+          pod repo remove trunk
+          pod repo add trunk https://cdn.cocoapods.org/
+          
+          # 重试机制：最多重试 3 次
+          for i in 1 2 3; do
+            echo "尝试 $i/3..."
+            pod install --repo-update && break
+            echo "重试中..."
+            sleep 10
+          done
       
       - name: 构建iOS应用
         run: |

@@ -1,0 +1,32 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '13.0'
+
+# CocoaPods 镜像源配置
+source 'https://cdn.cocoapods.org/'
+
+# 如果上面的镜像有问题，可以尝试使用国内镜像
+# source 'https://mirrors.tuna.tsinghua.edu.cn/git/CocoaPods.git'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # Flutter dependencies
+  flutter_install_all_ios_pods File.expand_path(File.join('..', 'Flutter', 'Podfile'))
+
+  # 你的其他 pod 依赖会在这里自动添加
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    # 解决 ffmpeg_kit 编译问题
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      
+      # 减少编译时间
+      config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+    end
+  end
+end
