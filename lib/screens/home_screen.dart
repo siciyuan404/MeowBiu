@@ -9,6 +9,8 @@ import '../widgets/category_selector.dart';
 import '../widgets/chat_sounds_list.dart';
 import '../widgets/sound_edit_dialog.dart';
 import '../widgets/category_edit_dialog.dart';
+import 'sound_edit_screen.dart';
+import '../widgets/category_edit_dialog.dart';
 import '../widgets/settings_drawer.dart';
 import 'about_screen.dart';
 import 'storage_settings_screen.dart';
@@ -24,19 +26,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final int _currentNavIndex = 0; // 当前选中的底部导航索引
 
-  // 显示添加猫声对话框
+  // 显示添加猫声页面
   Future<void> _showAddSoundDialog(String categoryId) async {
-    await showDialog(
-      context: context,
-      builder: (context) => SoundEditDialog(categoryId: categoryId),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SoundEditScreen(categoryId: categoryId),
+      ),
     );
   }
 
-  // 显示编辑猫声对话框
+  // 显示编辑猫声页面
   Future<void> _showEditSoundDialog(CatSound sound) async {
-    await showDialog(
-      context: context,
-      builder: (context) => SoundEditDialog(sound: sound),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SoundEditScreen(sound: sound),
+      ),
     );
   }
 

@@ -24,7 +24,7 @@ android {
         applicationId = "com.MeowBiu.MeowBiu"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24  // ffmpeg_kit_flutter 需要 API 24+
         targetSdk = flutter.targetSdkVersion
         versionCode = (flutter.versionCode ?: 1).toInt()
         versionName = flutter.versionName
