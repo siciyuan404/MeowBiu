@@ -7,6 +7,8 @@ jobs:
   build-android:
     name: 构建Android Debug版本
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: 检出代码
@@ -32,6 +34,8 @@ jobs:
             .dart_tool/
             build/
           key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
       
       - name: 获取依赖
         run: flutter pub get
@@ -44,3 +48,4 @@ jobs:
         with:
           name: meowbiu-debug-apk
           path: build/app/outputs/flutter-apk/app-*.apk
+          retention-days: 7

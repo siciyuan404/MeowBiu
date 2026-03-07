@@ -3,7 +3,7 @@ name: 构建和发布
 on:
   push:
     tags:
-      - 'v*' # 当推送标签如 v1.0.0 时触发
+      - 'v*'
   workflow_dispatch:
     inputs:
       build_type:
@@ -17,7 +17,7 @@ on:
 
 jobs:
   build-android:
-    name: 构建Android版本
+    name: 构建Android
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,9 +56,9 @@ jobs:
         if: github.event.inputs.build_type == 'debug'
         run: flutter build apk --debug
       
-      - name: 构建Release APK
+      - name: 构建Release APK (所有架构)
         if: github.event.inputs.build_type == 'release'
-        run: flutter build apk --release
+        run: flutter build apk --release --split-per-abi
       
       - name: 上传Debug APK
         if: github.event.inputs.build_type == 'debug'
@@ -68,14 +68,17 @@ jobs:
           path: build/app/outputs/flutter-apk/app-*.apk
           retention-days: 5
       
-      - name: 构建Release APK (ARM64)
+      - name: 上传Release APK
         if: github.event.inputs.build_type == 'release'
-        run: flutter build apk --release --target-platform android-arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowbiu-release-apk
+          path: build/app/outputs/flutter-apk/app-*.apk
+          retention-days: 30
       
       - name: 创建Release
-        if: github.inputs.build_type == 'release'
-        id: create_release
-        uses: softprops/action-gh-release@v1
+        if: github.event.inputs.build_type == 'release' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-*.apk
           name: 喵币 ${{ github.ref_name }}
@@ -86,8 +89,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-ios:
-    name: 构建iOS版本
+    name: 构建iOS
     runs-on: macos-latest
+    permissions:
+      contents: read
     
     steps:
       - name: 检出代码
@@ -106,7 +111,6 @@ jobs:
             ${{ env.PUB_CACHE }}
             .dart_tool/
             ios/Pods/
-            build/
           key: ${{ runner.os }}-pub-ios-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: |
             ${{ runner.os }}-pub-ios-
@@ -137,30 +141,16 @@ jobs:
             fi
           done
       
-      - name: 安装 iOS 依赖
-        run: |
-          cd ios
-          # 设置 pod 镜像源（使用国内镜像解决 404 问题）
-          pod repo remove trunk
-          pod repo add trunk https://cdn.cocoapods.org/
-          
-          # 重试机制：最多重试 3 次
-          for i in 1 2 3; do
-            echo "尝试 $i/3..."
-            pod install --repo-update && break
-            echo "重试中..."
-            sleep 10
-          done
+      - name: 安装iOS依赖
+        run: cd ios && pod install --repo-update
+        timeout-minutes: 30
       
-      - name: 构建iOS应用
-        run: |
-          flutter build ios --release --no-codesign
-          cd ios
-          mkdir -p build/archive
+      - name: 构建iOS
+        run: flutter build ios --release --no-codesign
       
       - name: 上传iOS构建结果
         uses: actions/upload-artifact@v4
         with:
           name: ios-build
-          path: ios/build/
+          path: build/ios/iphoneos/
           retention-days: 5
