@@ -43,12 +43,20 @@ jobs:
       - name: 修复 ffmpeg_kit_flutter AndroidManifest 问题
         run: |
           # 找到并修复 ffmpeg_kit_flutter_full_gpl 的 AndroidManifest.xml
-          MANIFEST_PATH=$(find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | head -1)
-          if [ -n "$MANIFEST_PATH" ] && [ -f "$MANIFEST_PATH" ]; then
-            echo "修复 AndroidManifest.xml: $MANIFEST_PATH"
-            # 移除过时的 package 属性
-            sed -i 's/package="com.arthenica.ffmpegkit.flutter"//g' "$MANIFEST_PATH"
-          fi
+          echo "Searching for AndroidManifest.xml..."
+          find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | while read manifest; do
+            echo "Found: $manifest"
+            if grep -q 'package="com.arthenica.ffmpegkit.flutter"' "$manifest"; then
+              echo "Removing package attribute from $manifest"
+              sed -i 's/package="com.arthenica.ffmpegkit.flutter"//g' "$manifest"
+            fi
+          done
+          
+          # 验证修复
+          find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | while read manifest; do
+            echo "Checking: $manifest"
+            cat "$manifest" | head -5
+          done
       
       - name: 构建Debug APK
         run: flutter build apk --debug

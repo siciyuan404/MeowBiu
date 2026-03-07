@@ -13,8 +13,16 @@ subprojects {
         if (project.hasProperty("android")) {
             val android = project.extensions.findByName("android")
             if (android is com.android.build.gradle.LibraryExtension) {
-                if (android.namespace == null) {
-                    android.namespace = project.group.toString()
+                if (android.namespace == null || android.namespace.isNullOrEmpty()) {
+                    // 从 AndroidManifest.xml 中提取 package 属性作为 namespace
+                    val manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")
+                    if (manifestFile.exists()) {
+                        val manifestContent = manifestFile.readText()
+                        val packageMatch = Regex("""package="([^"]+)"""").find(manifestContent)
+                        if (packageMatch != null) {
+                            android.namespace = packageMatch.groupValues[1]
+                        }
+                    }
                 }
             }
         }
