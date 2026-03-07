@@ -29,24 +29,6 @@ subprojects {
     }
 }
 
-// 修复旧版插件的 AndroidManifest.xml package 属性问题 (AGP 8.x)
-subprojects {
-    tasks.withType<com.android.build.gradle.tasks.ProcessManifest>().configureEach {
-        doLast {
-            val manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")
-            if (manifestFile.exists()) {
-                var content = manifestFile.readText()
-                // 移除 package 属性
-                if (content.contains("package=")) {
-                    content = content.replace(Regex("""package="[^"]*"\s*"""), "")
-                    manifestFile.writeText(content)
-                    println("Fixed AndroidManifest.xml for ${project.name}")
-                }
-            }
-        }
-    }
-}
-
 val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
