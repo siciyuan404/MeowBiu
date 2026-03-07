@@ -42,21 +42,29 @@ jobs:
       
       - name: 修复 ffmpeg_kit_flutter AndroidManifest 问题
         run: |
-          # 找到并修复 ffmpeg_kit_flutter_full_gpl 的 AndroidManifest.xml
-          echo "Searching for AndroidManifest.xml..."
-          find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | while read manifest; do
-            echo "Found: $manifest"
-            if grep -q 'package="com.arthenica.ffmpegkit.flutter"' "$manifest"; then
-              echo "Removing package attribute from $manifest"
-              sed -i 's/package="com.arthenica.ffmpegkit.flutter"//g' "$manifest"
-            fi
-          done
+          echo "=== 开始修复 ffmpeg_kit_flutter AndroidManifest ==="
           
-          # 验证修复
-          find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | while read manifest; do
-            echo "Checking: $manifest"
-            cat "$manifest" | head -5
-          done
+          # 删除缓存并重新获取依赖（确保使用最新版本）
+          rm -rf ~/.pub-cache/hosted/pub.dev/ffmpeg_kit_flutter_full_gpl*
+          echo "已删除旧的缓存"
+          
+          # 手动下载 ffmpeg_kit_flutter_full_gpl
+          cd /tmp
+          flutter pub cache add ffmpeg_kit_flutter_full_gpl:^5.1.0 2>/dev/null || true
+          
+          # 找到 AndroidManifest.xml 并修复
+          MANIFEST_PATH=$(find ~/.pub-cache -name "AndroidManifest.xml" -path "*ffmpeg_kit_flutter_full_gpl*" 2>/dev/null | head -1)
+          if [ -n "$MANIFEST_PATH" ] && [ -f "$MANIFEST_PATH" ]; then
+            echo "修复 AndroidManifest.xml: $MANIFEST_PATH"
+            # 移除过时的 package 属性
+            sed -i 's/package="com.arthenica.ffmpegkit.flutter"//g' "$MANIFEST_PATH"
+            echo "修复后的前5行:"
+            head -5 "$MANIFEST_PATH"
+          else
+            echo "警告: 未找到 AndroidManifest.xml"
+          fi
+          
+          echo "=== 修复完成 ==="
       
       - name: 构建Debug APK
         run: flutter build apk --debug
