@@ -2,8 +2,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // ffmpeg-kit repository
-        maven { url = uri("https://packages.arthenica.com/releases") }
     }
 }
 
