@@ -50,19 +50,8 @@ class _ChatSoundsListState extends ConsumerState<ChatSoundsList> {
       child: soundsAsync.when(
         data: (sounds) {
           if (sounds.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('暂无音频，添加一些喵音吧~'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: widget.onAddSound,
-                    icon: const Icon(Icons.add),
-                    label: const Text('添加音频'),
-                  ),
-                ],
-              ),
+            return const Center(
+              child: Text('暂无音频，点击底部 + 按钮添加喵音~'),
             );
           }
           
