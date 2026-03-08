@@ -59,15 +59,15 @@ jobs:
           echo "GRADLE_MAX_WORKERS=2" >> $GITHUB_ENV
       
       - name: 构建Debug APK
-        if: github.event.inputs.build_type == 'debug'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         run: flutter build apk --debug --target-platform android-arm64
       
       - name: 构建Release APK
-        if: github.event.inputs.build_type == 'release'
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release') || startsWith(github.ref, 'refs/tags/')
         run: flutter build apk --release --split-per-abi
       
       - name: 上传Debug APK
-        if: github.event.inputs.build_type == 'debug'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         uses: actions/upload-artifact@v4
         with:
           name: meowbiu-debug-apk
@@ -75,7 +75,7 @@ jobs:
           retention-days: 5
       
       - name: 上传Release APK
-        if: github.event.inputs.build_type == 'release'
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release') || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: meowbiu-release-apk
