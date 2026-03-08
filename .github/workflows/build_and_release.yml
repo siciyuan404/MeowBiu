@@ -52,11 +52,15 @@ jobs:
       - name: 获取依赖
         run: flutter pub get
       
+      - name: 设置Gradle内存
+        run: |
+          echo "GRADLE_OPTS=-Xmx4g -XX:MaxMetaspaceSize=1G -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> $GITHUB_ENV
+      
       - name: 构建Debug APK
         if: github.event.inputs.build_type == 'debug'
         run: flutter build apk --debug
       
-      - name: 构建Release APK (所有架构)
+      - name: 构建Release APK
         if: github.event.inputs.build_type == 'release'
         run: flutter build apk --release --split-per-abi
       
