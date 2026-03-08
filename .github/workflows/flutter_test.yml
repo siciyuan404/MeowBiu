@@ -115,5 +115,8 @@ jobs:
       - name: 获取依赖
         run: flutter pub get
       
+      - name: 设置Gradle内存
+        run: echo "GRADLE_OPTS=-Xmx4g -XX:+HeapDumpOnOutOfMemoryError" >> $GITHUB_ENV
+      
       - name: 构建Debug APK
         run: flutter build apk --debug
