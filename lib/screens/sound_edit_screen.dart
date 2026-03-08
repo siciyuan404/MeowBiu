@@ -189,7 +189,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
       
       if (duration != null && mounted) {
         setState(() {
-          _totalDuration = duration.inMilliseconds / 1000.0;
+          _totalDuration = duration!.inMilliseconds / 1000.0;
           _trimEnd = _totalDuration;
           _isPreviewReady = true;
         });
