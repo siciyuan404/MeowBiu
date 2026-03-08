@@ -11,8 +11,8 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  # Flutter dependencies - 使用新版 Flutter 安装方式
-  flutter_install_ios_engine_pod()
+  # Flutter dependencies - 新版 Flutter 不需要手动调用此方法
+  # flutter_install_ios_engine_pod()  # 已废弃，Flutter 自动处理
 
   # 你的其他 pod 依赖会在这里自动添加
 end
