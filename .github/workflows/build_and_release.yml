@@ -83,7 +83,7 @@ jobs:
           retention-days: 30
       
       - name: 创建Release
-        if: github.event.inputs.build_type == 'release' && startsWith(github.ref, 'refs/tags/')
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release') || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-*.apk
