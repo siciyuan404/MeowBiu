@@ -37,7 +37,7 @@ jobs:
         run: flutter pub get
       
       - name: 检查代码格式
-        run: dart format --check .
+        run: dart format --set-exit-if-changed .
       
       - name: 代码分析
         run: flutter analyze
