@@ -6,13 +6,12 @@ import 'package:ffmpeg_kit_flutter_audio/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_audio/return_code.dart';
 import 'package:ffmpeg_kit_flutter_audio/statistics.dart';
 
+/// 进度回调函数类型
+typedef ProgressCallback = void Function(double progress);
+
 /// 音频编辑服务
 /// 使用 FFmpeg 实现音频裁切、提取等功能
 class AudioEditorService {
-  /// 回调函数类型：处理进度 (0.0 - 1.0)
-  typedef ProgressCallback = void Function(double progress);
-
-  /// 获取媒体文件时长（秒）
   static Future<double?> getMediaDuration(String mediaPath) async {
     try {
       final session = await FFprobeKit.getMediaInformation(mediaPath);
