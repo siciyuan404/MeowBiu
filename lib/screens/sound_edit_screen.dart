@@ -370,27 +370,27 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _trimStart = 0;
           _trimEnd = 1;
           break;
-        '3s':
+        case '3s':
           _trimStart = 0;
           _trimEnd = 3;
           break;
-        '5s':
+        case '5s':
           _trimStart = 0;
           _trimEnd = 5;
           break;
-        '10s':
+        case '10s':
           _trimStart = 0;
           _trimEnd = 10 > _totalDuration ? _totalDuration : 10;
           break;
-        'full':
+        case 'full':
           _trimStart = 0;
           _trimEnd = _totalDuration;
           break;
-        'half':
+        case 'half':
           _trimStart = 0;
           _trimEnd = _totalDuration / 2;
           break;
-        'middle':
+        case 'middle':
           final center = _totalDuration / 2;
           _trimStart = (center - 2.5).clamp(0, _totalDuration);
           _trimEnd = (center + 2.5).clamp(0, _totalDuration);
