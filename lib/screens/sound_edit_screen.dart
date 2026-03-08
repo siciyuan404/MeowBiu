@@ -15,6 +15,8 @@ enum AudioSource {
   audioTrim,   // 裁切现有音频
 }
 
+/// 音频编辑屏幕
+/// 支持添加新音频和裁切/提取现有音频
 class SoundEditScreen extends ConsumerStatefulWidget {
   final CatSound? sound;
   final String? categoryId;
@@ -42,11 +44,16 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   double _trimStart = 0;
   double _trimEnd = 0;
   double _totalDuration = 0;
+  double _processingProgress = 0;
   bool _isProcessing = false;
   
   // 音频播放器
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
+  bool _isPreviewReady = false;
+  
+  // 裁切模式：精确 vs 快速
+  bool _preciseTrim = false;
   
   @override
   void initState() {
@@ -71,6 +78,22 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         setState(() {
           _isPlaying = state.playing;
         });
+        
+        // 播放完成后自动停止
+        if (state.processingState == ProcessingState.completed) {
+          _audioPlayer.stop();
+          _audioPlayer.seek(Duration(milliseconds: (_trimStart * 1000).toInt()));
+        }
+      }
+    });
+    
+    // 监听位置用于预览
+    _audioPlayer.positionStream.listen((position) {
+      if (mounted && _isPlaying) {
+        // 如果播放超出裁切范围，自动停止
+        if (position.inMilliseconds / 1000 >= _trimEnd) {
+          _audioPlayer.stop();
+        }
       }
     });
   }
@@ -88,7 +111,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
     try {
       final XTypeGroup audioGroup = XTypeGroup(
         label: '音频文件',
-        extensions: ['mp3', 'wav', 'ogg', 'aac', 'm4a'],
+        extensions: ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'],
       );
       
       final XFile? file = await openFile(
@@ -100,6 +123,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _localFilePath = file.path;
           _trimStart = 0;
           _trimEnd = 0;
+          _totalDuration = 0;
         });
         await _loadAudioDuration(file.path);
       }
@@ -115,7 +139,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
     try {
       final XTypeGroup videoGroup = XTypeGroup(
         label: '视频文件',
-        extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'],
+        extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'],
       );
       
       final XFile? file = await openFile(
@@ -128,6 +152,19 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _trimStart = 0;
           _trimEnd = 0;
         });
+        
+        // 获取视频时长
+        final duration = await AudioEditorService.getMediaDuration(file.path);
+        if (duration != null && mounted) {
+          setState(() {
+            _totalDuration = duration;
+            _trimEnd = duration;
+          });
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已选择视频: ${file.name}\n时长: ${_formatDuration(_totalDuration)}')),
+        );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,11 +176,22 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   /// 加载音频时长
   Future<void> _loadAudioDuration(String path) async {
     try {
-      final duration = await _audioPlayer.setFilePath(path);
+      // 先尝试用 just_audio 获取
+      var duration = await _audioPlayer.setFilePath(path);
+      
+      if (duration == null) {
+        // 备用：用 FFprobe 获取
+        final probeDuration = await AudioEditorService.getMediaDuration(path);
+        if (probeDuration != null) {
+          duration = Duration(milliseconds: (probeDuration * 1000).toInt());
+        }
+      }
+      
       if (duration != null && mounted) {
         setState(() {
           _totalDuration = duration.inMilliseconds / 1000.0;
           _trimEnd = _totalDuration;
+          _isPreviewReady = true;
         });
       }
     } catch (e) {
@@ -158,7 +206,13 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         await _audioPlayer.stop();
       } else {
         if (_localFilePath != null) {
-          await _audioPlayer.setFilePath(_localFilePath!);
+          // 设置裁切范围播放
+          if (!_isPreviewReady) {
+            await _audioPlayer.setFilePath(_localFilePath!);
+            _isPreviewReady = true;
+          }
+          
+          // 跳转到开始位置
           await _audioPlayer.seek(Duration(milliseconds: (_trimStart * 1000).toInt()));
           await _audioPlayer.play();
         }
@@ -178,29 +232,51 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   /// 从视频提取音频
   Future<void> _extractAudioFromVideo() async {
     if (_localFilePath == null) return;
+    if (_trimEnd - _trimStart <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请设置有效的裁切范围')),
+      );
+      return;
+    }
     
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _processingProgress = 0;
+    });
     
     try {
       final result = await AudioEditorService.extractAudioFromVideo(
         videoPath: _localFilePath!,
         startTime: _trimStart,
         duration: _trimEnd - _trimStart,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() => _processingProgress = progress);
+          }
+        },
       );
       
       if (result != null && mounted) {
         setState(() {
           _localFilePath = result;
-          _source = AudioSource.localFile; // 转换为本地文件
+          _source = AudioSource.localFile;
+          _trimStart = 0;
+          _trimEnd = _totalDuration;
         });
         await _loadAudioDuration(result);
         
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('音频提取成功!')),
+          const SnackBar(
+            content: Text('音频提取成功!'),
+            backgroundColor: Colors.green,
+          ),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('音频提取失败')),
+          const SnackBar(
+            content: Text('音频提取失败'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
@@ -211,7 +287,10 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _processingProgress = 0;
+        });
       }
     }
   }
@@ -219,14 +298,28 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   /// 裁切音频
   Future<void> _trimAudio() async {
     if (_localFilePath == null) return;
+    if (_trimEnd - _trimStart <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请设置有效的裁切范围')),
+      );
+      return;
+    }
     
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _processingProgress = 0;
+    });
     
     try {
       final result = await AudioEditorService.trimAudio(
         audioPath: _localFilePath!,
         startTime: _trimStart,
         duration: _trimEnd - _trimStart,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() => _processingProgress = progress);
+          }
+        },
       );
       
       if (result != null && mounted) {
@@ -238,11 +331,17 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         await _loadAudioDuration(result);
         
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('音频裁切成功!')),
+          const SnackBar(
+            content: Text('音频裁切成功!'),
+            backgroundColor: Colors.green,
+          ),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('音频裁切失败')),
+          const SnackBar(
+            content: Text('音频裁切失败'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
@@ -253,9 +352,51 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _processingProgress = 0;
+        });
       }
     }
+  }
+  
+  /// 设置裁切范围预设
+  void _setTrimPreset(String preset) {
+    if (_totalDuration <= 0) return;
+    
+    setState(() {
+      switch (preset) {
+        case '1s':
+          _trimStart = 0;
+          _trimEnd = 1;
+          break;
+        '3s':
+          _trimStart = 0;
+          _trimEnd = 3;
+          break;
+        '5s':
+          _trimStart = 0;
+          _trimEnd = 5;
+          break;
+        '10s':
+          _trimStart = 0;
+          _trimEnd = 10 > _totalDuration ? _totalDuration : 10;
+          break;
+        'full':
+          _trimStart = 0;
+          _trimEnd = _totalDuration;
+          break;
+        'half':
+          _trimStart = 0;
+          _trimEnd = _totalDuration / 2;
+          break;
+        'middle':
+          final center = _totalDuration / 2;
+          _trimStart = (center - 2.5).clamp(0, _totalDuration);
+          _trimEnd = (center + 2.5).clamp(0, _totalDuration);
+          break;
+      }
+    });
   }
   
   /// 保存猫声
@@ -362,6 +503,8 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.sound != null;
+    final showTrimControls = (_source == AudioSource.videoExtract || _source == AudioSource.audioTrim) 
+        && _localFilePath != null && _totalDuration > 0;
     
     return Scaffold(
       appBar: AppBar(
@@ -375,134 +518,155 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
             ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 名称输入
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '名称',
-                hintText: '输入猫声名称',
-                prefixIcon: Icon(Icons.pets),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入名称';
-                }
-                return null;
-              },
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // 音频来源选择
-            const Text(
-              '音频来源',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            _buildSourceOption(
-              icon: Icons.folder_open,
-              title: '本地音频文件',
-              subtitle: '选择 MP3、WAV 等音频文件',
-              value: AudioSource.localFile,
-            ),
-            _buildSourceOption(
-              icon: Icons.link,
-              title: '网络链接',
-              subtitle: '输入音频文件的 URL',
-              value: AudioSource.networkUrl,
-            ),
-            _buildSourceOption(
-              icon: Icons.video_file,
-              title: '从视频提取音频',
-              subtitle: '从视频文件中提取并裁切音频',
-              value: AudioSource.videoExtract,
-            ),
-            _buildSourceOption(
-              icon: Icons.content_cut,
-              title: '裁切现有音频',
-              subtitle: '对音频文件进行裁切',
-              value: AudioSource.audioTrim,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // 来源详情
-            _buildSourceDetails(),
-            
-            // 裁切控制（仅对视频提取和音频裁切显示）
-            if ((_source == AudioSource.videoExtract || _source == AudioSource.audioTrim) 
-                && _localFilePath != null) ...[
-              const SizedBox(height: 24),
-              _buildTrimControls(),
-            ],
-            
-            // 处理按钮
-            if ((_source == AudioSource.videoExtract || _source == AudioSource.audioTrim) 
-                && _localFilePath != null
-                && (_trimEnd - _trimStart > 0)) ...[
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _isProcessing 
-                    ? null 
-                    : (_source == AudioSource.videoExtract 
-                        ? _extractAudioFromVideo 
-                        : _trimAudio),
-                icon: _isProcessing 
-                    ? const SizedBox(
-                        width: 16, 
-                        height: 16, 
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check),
-                label: Text(_source == AudioSource.videoExtract 
-                    ? '提取音频' 
-                    : '裁切音频'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-              ),
-            ],
-            
-            const SizedBox(height: 24),
-            
-            // 缓存状态（仅编辑模式）
-            if (isEditing && widget.sound!.isNetworkSource) ...[
-              Card(
-                child: ListTile(
-                  leading: Icon(
-                    widget.sound!.isCached ? Icons.check_circle : Icons.info_outline,
-                    color: widget.sound!.isCached ? Colors.green : null,
+      body: Stack(
+        children: [
+          Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // 名称输入
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: '名称',
+                    hintText: '输入猫声名称',
+                    prefixIcon: Icon(Icons.pets),
                   ),
-                  title: Text(widget.sound!.isCached ? '已缓存' : '未缓存'),
-                  subtitle: widget.sound!.isCached 
-                      ? const Text('点击右上角按钮可清除缓存')
-                      : const Text('首次播放后将自动缓存'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入名称';
+                    }
+                    return null;
+                  },
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // 音频来源选择
+                const Text(
+                  '音频来源',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                _buildSourceOption(
+                  icon: Icons.folder_open,
+                  title: '本地音频文件',
+                  subtitle: '选择 MP3、WAV 等音频文件',
+                  value: AudioSource.localFile,
+                ),
+                _buildSourceOption(
+                  icon: Icons.link,
+                  title: '网络链接',
+                  subtitle: '输入音频文件的 URL',
+                  value: AudioSource.networkUrl,
+                ),
+                _buildSourceOption(
+                  icon: Icons.video_file,
+                  title: '从视频提取音频',
+                  subtitle: '从视频文件中提取并裁切音频',
+                  value: AudioSource.videoExtract,
+                ),
+                _buildSourceOption(
+                  icon: Icons.content_cut,
+                  title: '裁切现有音频',
+                  subtitle: '对音频文件进行裁切',
+                  value: AudioSource.audioTrim,
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // 来源详情
+                _buildSourceDetails(),
+                
+                // 裁切控制面板
+                if (showTrimControls) ...[
+                  const SizedBox(height: 24),
+                  _buildTrimControls(),
+                ],
+                
+                // 处理按钮
+                if (showTrimControls && (_trimEnd - _trimStart > 0)) ...[
+                  const SizedBox(height: 16),
+                  _buildProcessButton(),
+                ],
+                
+                const SizedBox(height: 24),
+                
+                // 缓存状态（仅编辑模式）
+                if (isEditing && widget.sound!.isNetworkSource) ...[
+                  Card(
+                    child: ListTile(
+                      leading: Icon(
+                        widget.sound!.isCached ? Icons.check_circle : Icons.info_outline,
+                        color: widget.sound!.isCached ? Colors.green : null,
+                      ),
+                      title: Text(widget.sound!.isCached ? '已缓存' : '未缓存'),
+                      subtitle: widget.sound!.isCached 
+                          ? const Text('点击右上角按钮可清除缓存')
+                          : const Text('首次播放后将自动缓存'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
+                // 保存按钮
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _saveSound,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                  child: _isLoading 
+                      ? const CircularProgressIndicator()
+                      : Text(isEditing ? '保存' : '添加'),
+                ),
+                
+                // 底部安全区域
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+          
+          // 处理中的遮罩层
+          if (_isProcessing)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Card(
+                  margin: const EdgeInsets.all(32),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          _source == AudioSource.videoExtract 
+                              ? '正在提取音频...' 
+                              : '正在裁切音频...',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: _processingProgress > 0 ? _processingProgress : null,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_processingProgress * 100).toInt()}%',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
-            
-            // 保存按钮
-            ElevatedButton(
-              onPressed: _isLoading ? null : _saveSound,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(56),
-              ),
-              child: _isLoading 
-                  ? const CircularProgressIndicator()
-                  : Text(isEditing ? '保存' : '添加'),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -605,7 +769,8 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         if (value == null || value.trim().isEmpty) {
           return '请输入 URL';
         }
-        if (!Uri.tryParse(value)!.isAbsolute) {
+        final uri = Uri.tryParse(value);
+        if (uri == null || !uri.isAbsolute) {
           return '请输入有效的 URL';
         }
         return null;
@@ -615,9 +780,6 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   
   Widget _buildMediaFileSelector() {
     final isVideo = _source == AudioSource.videoExtract;
-    final exts = isVideo 
-        ? ['mp4', 'mov', 'avi', 'mkv', 'webm']
-        : ['mp3', 'wav', 'ogg', 'aac', 'm4a'];
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,6 +807,23 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (_totalDuration > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _formatDuration(_totalDuration),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -653,85 +832,258 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   }
   
   Widget _buildTrimControls() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题栏
+            Row(
+              children: [
+                const Icon(Icons.content_cut, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  '裁切设置',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const Spacer(),
+                // 快速裁切开关
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('精确', style: TextStyle(fontSize: 12)),
+                    Switch(
+                      value: _preciseTrim,
+                      onChanged: (value) => setState(() => _preciseTrim = value),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // 快速预设按钮
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildPresetChip('1s', '1秒'),
+                _buildPresetChip('3s', '3秒'),
+                _buildPresetChip('5s', '5秒'),
+                _buildPresetChip('10s', '10秒'),
+                _buildPresetChip('half', '一半'),
+                _buildPresetChip('middle', '中间5秒'),
+                _buildPresetChip('full', '完整'),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 波形/进度可视化区域
+            Container(
+              height: 60,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildWaveformVisualization(),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 开始时间滑块
+            _buildTimeSlider(
+              label: '开始',
+              value: _trimStart,
+              min: 0,
+              max: _totalDuration,
+              onChanged: (value) {
+                setState(() {
+                  _trimStart = value;
+                  if (_trimEnd <= _trimStart) {
+                    _trimEnd = (_trimStart + 1).clamp(0, _totalDuration);
+                  }
+                });
+              },
+              activeColor: Colors.green,
+            ),
+            
+            // 结束时间滑块
+            _buildTimeSlider(
+              label: '结束',
+              value: _trimEnd,
+              min: 0,
+              max: _totalDuration,
+              onChanged: (value) {
+                setState(() {
+                  _trimEnd = value;
+                  if (_trimEnd <= _trimStart) {
+                    _trimStart = (_trimEnd - 1).clamp(0, _totalDuration);
+                  }
+                });
+              },
+              activeColor: Colors.red,
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // 时长信息与预览
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          '裁切后时长',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDuration(_trimEnd - _trimStart),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 预览按钮
+                FilledButton.icon(
+                  onPressed: _playPreview,
+                  icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
+                  label: Text(_isPlaying ? '停止' : '预览'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(100, 48),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildPresetChip(String value, String label) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () => _setTrimPreset(value),
+    );
+  }
+  
+  Widget _buildWaveformVisualization() {
+    // 简化的波形可视化
+    // 实际项目中可以使用 audio_waveforms 包获取真实波形数据
+    return CustomPaint(
+      size: const Size(double.infinity, 60),
+      painter: WaveformPainter(
+        trimStart: _trimStart,
+        trimEnd: _trimEnd,
+        totalDuration: _totalDuration,
+        waveformColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+        selectedColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: Colors.transparent,
+      ),
+    );
+  }
+  
+  Widget _buildTimeSlider({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+    required Color activeColor,
+  }) {
+    return Row(
       children: [
-        Row(
-          children: [
-            const Icon(Icons.content_cut, size: 20),
-            const SizedBox(width: 8),
-            const Text(
-              '裁切设置',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _playPreview,
-              icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-              label: Text(_isPlaying ? '停止' : '预览'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        
-        // 开始时间
-        Row(
-          children: [
-            const SizedBox(width: 80, child: Text('开始:')),
-            Expanded(
-              child: Slider(
-                value: _trimStart,
-                min: 0,
-                max: _totalDuration,
-                onChanged: (value) {
-                  setState(() {
-                    _trimStart = value;
-                    if (_trimEnd <= _trimStart) {
-                      _trimEnd = _trimStart + 1;
-                    }
-                  });
-                },
-              ),
-            ),
-            SizedBox(
-              width: 60,
-              child: Text(_formatDuration(_trimStart)),
-            ),
-          ],
-        ),
-        
-        // 结束时间
-        Row(
-          children: [
-            const SizedBox(width: 80, child: Text('结束:')),
-            Expanded(
-              child: Slider(
-                value: _trimEnd,
-                min: 0,
-                max: _totalDuration,
-                onChanged: (value) {
-                  setState(() {
-                    _trimEnd = value;
-                    if (_trimEnd <= _trimStart) {
-                      _trimStart = _trimEnd - 1;
-                    }
-                  });
-                },
-              ),
-            ),
-            SizedBox(
-              width: 60,
-              child: Text(_formatDuration(_trimEnd)),
-            ),
-          ],
-        ),
-        
-        // 时长信息
-        Center(
+        SizedBox(
+          width: 48,
           child: Text(
-            '裁切后时长: ${_formatDuration(_trimEnd - _trimStart)}',
+            label,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.secondary,
+              fontWeight: FontWeight.bold,
+              color: activeColor,
+            ),
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: activeColor,
+              thumbColor: activeColor,
+              inactiveTrackColor: activeColor.withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 56,
+          child: Text(
+            _formatDuration(value),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildProcessButton() {
+    final isExtract = _source == AudioSource.videoExtract;
+    
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _isProcessing ? null : () {
+              // 重置为完整长度
+              setState(() {
+                _trimStart = 0;
+                _trimEnd = _totalDuration;
+              });
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('重置'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: FilledButton.icon(
+            onPressed: _isProcessing 
+                ? null 
+                : (isExtract ? _extractAudioFromVideo : _trimAudio),
+            icon: Icon(isExtract ? Icons.music_note : Icons.content_cut),
+            label: Text(isExtract ? '提取音频' : '裁切音频'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
             ),
           ),
         ),
@@ -740,8 +1092,112 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   }
   
   String _formatDuration(double seconds) {
+    if (seconds < 0) seconds = 0;
     final mins = (seconds / 60).floor();
     final secs = (seconds % 60).floor();
-    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    final ms = ((seconds * 100) % 100).floor();
+    
+    if (mins > 0) {
+      return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '${secs.toString().padLeft(2, '0')}.${ms.toString().padLeft(2, '0')}';
+  }
+}
+
+/// 波形可视化画笔
+class WaveformPainter extends CustomPainter {
+  final double trimStart;
+  final double trimEnd;
+  final double totalDuration;
+  final Color waveformColor;
+  final Color selectedColor;
+  final Color backgroundColor;
+  
+  WaveformPainter({
+    required this.trimStart,
+    required this.trimEnd,
+    required this.totalDuration,
+    required this.waveformColor,
+    required this.selectedColor,
+    required this.backgroundColor,
+  });
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (totalDuration <= 0) return;
+    
+    final startX = (trimStart / totalDuration) * size.width;
+    final endX = (trimEnd / totalDuration) * size.width;
+    
+    // 绘制未选中区域（变暗）
+    final unselectedPaint = Paint()
+      ..color = waveformColor
+      ..style = PaintingStyle.fill;
+    
+    // 左侧未选中
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, startX, size.height),
+      unselectedPaint,
+    );
+    
+    // 右侧未选中
+    canvas.drawRect(
+      Rect.fromLTWH(endX, 0, size.width - endX, size.height),
+      unselectedPaint,
+    );
+    
+    // 绘制选中区域边框
+    final selectedBorderPaint = Paint()
+      ..color = selectedColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    
+    canvas.drawRect(
+      Rect.fromLTWH(startX, 0, endX - startX, size.height),
+      selectedBorderPaint,
+    );
+    
+    // 绘制模拟波形（在选中区域内）
+    final wavePaint = Paint()
+      ..color = selectedColor.withValues(alpha: 0.6)
+      ..style = PaintingStyle.fill;
+    
+    final waveWidth = 3.0;
+    final waveGap = 2.0;
+    final centerY = size.height / 2;
+    
+    // 生成伪随机波形（实际项目应使用真实波形数据）
+    for (var i = startX; i < endX; i += waveWidth + waveGap) {
+      final height = 8 + ((((i * 7) % 17) + 3) % 20);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(i + waveWidth / 2, centerY),
+            width: waveWidth,
+            height: height,
+          ),
+          const Radius.circular(1),
+        ),
+        wavePaint,
+      );
+    }
+    
+    // 绘制手柄
+    final handlePaint = Paint()
+      ..color = selectedColor
+      ..style = PaintingStyle.fill;
+    
+    // 开始手柄
+    canvas.drawCircle(Offset(startX, size.height / 2), 6, handlePaint);
+    
+    // 结束手柄
+    canvas.drawCircle(Offset(endX, size.height / 2), 6, handlePaint);
+  }
+  
+  @override
+  bool shouldRepaint(covariant WaveformPainter oldDelegate) {
+    return trimStart != oldDelegate.trimStart ||
+           trimEnd != oldDelegate.trimEnd ||
+           totalDuration != oldDelegate.totalDuration;
   }
 }
