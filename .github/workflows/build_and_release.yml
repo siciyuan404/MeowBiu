@@ -50,7 +50,9 @@ jobs:
             ${{ runner.os }}-pub-android-
       
       - name: 获取依赖
-        run: flutter pub get
+        run: |
+          flutter pub get
+          flutter pub upgrade  # 强制更新依赖到最新兼容版本
       
       - name: 设置Gradle内存
         run: |
