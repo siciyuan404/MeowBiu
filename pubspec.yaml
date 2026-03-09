@@ -45,7 +45,7 @@ dependencies:
   # 音视频处理
   audioplayers: ^5.2.0
   just_audio: ^0.10.0
-  ffmpeg_kit_flutter: ^6.0.3  # 音频/视频处理
+  flutter_ffmpeg: ^0.3.1  # 音频/视频处理
   
   # 状态管理
   flutter_riverpod: ^2.4.0
