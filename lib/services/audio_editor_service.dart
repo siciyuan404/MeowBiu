@@ -171,7 +171,7 @@ class AudioEditorService {
 
       final dir = await getApplicationDocumentsDirectory();
       final baseName = DateTime.now().millisecondsSinceEpoch.toString();
-      final outputPath = '$dirPath/$baseName.$outputFormat';
+      final outputPath = '${dir.path}/$baseName.$outputFormat';
 
       final result = await Process.run('ffmpeg', [
         '-i', inputPath,
@@ -203,7 +203,7 @@ class AudioEditorService {
 
       // 创建临时 concat 文件
       final concatContent = inputPaths.map((p) => "file '$p'").join('\n');
-      final concatFile = File('${await getTemporaryDirectory().path}/concat.txt');
+      final concatFile = File('${(await getTemporaryDirectory()).path}/concat.txt');
       await concatFile.writeAsString(concatContent);
 
       final dir = await getApplicationDocumentsDirectory();
