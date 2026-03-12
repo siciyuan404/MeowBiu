@@ -175,7 +175,7 @@ class AudioEditorService {
 
       final result = await Process.run('ffmpeg', [
         '-i', inputPath,
-        '-acodec', 'libmp3lame' if outputFormat == 'mp3' else 'copy',
+        '-acodec', outputFormat == 'mp3' ? 'libmp3lame' : 'copy',
         outputPath
       ]);
 
