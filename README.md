@@ -16,4 +16,4 @@ For help getting started with Flutter development, view the
 samples, guidance on mobile development, and an API reference.
 
 ---
-*Updated at 2026-03-12 - 触发 GitHub Actions 构建测试*
+*Updated at 2026-03-12 - 修复版本兼容性问题并重新触发构建*
