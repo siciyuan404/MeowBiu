@@ -16,10 +16,10 @@ class AboutScreen extends ConsumerStatefulWidget {
 
 class _AboutScreenState extends ConsumerState<AboutScreen> {
   PackageInfo _packageInfo = PackageInfo(
-    appName: '喵语',
+    appName: 'MeowBiu',
     packageName: 'com.example.meowbiu',
-    version: '1.0.0',
-    buildNumber: '1',
+    version: '1.3.3',
+    buildNumber: '3',
   );
 
   bool _autoUpdateEnabled = true;
@@ -152,8 +152,8 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
               _buildListItem(
                 context,
                 icon: Icons.info_outlined,
-                title: '当前版本',
-                description: _packageInfo.version,
+                title: 'MeowBiu v${_packageInfo.version}',
+                description: 'Build ${_packageInfo.buildNumber}',
                 onTap: () {
                   final detailInfo = '应用名称: ${_packageInfo.appName}\n'
                       '包名: ${_packageInfo.packageName}\n'
