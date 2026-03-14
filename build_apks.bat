@@ -1,5 +1,5 @@
 @echo off
-echo ===== 开始构建多架构APK (v1.2.8+8) =====
+echo ===== 开始构建多架构APK (v1.3.4+4) =====
 echo.
 
 echo [1/4] 构建arm64-v8a架构APK (现代64位Android手机)...
@@ -40,17 +40,17 @@ mkdir release-apks 2>nul
 cd build\app\outputs\flutter-apk\
 
 echo 重命名并复制APK文件...
-copy app-arm64-v8a-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.2.8-arm64-v8a.apk
-copy app-armeabi-v7a-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.2.8-armeabi-v7a.apk
-copy app-x86_64-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.2.8-x86_64.apk
-copy app-x86-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.2.8-x86.apk
+copy app-arm64-v8a-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.3.4-arm64-v8a.apk
+copy app-armeabi-v7a-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.3.4-armeabi-v7a.apk
+copy app-x86_64-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.3.4-x86_64.apk
+copy app-x86-release.apk ..\..\..\..\..\release-apks\MeowBiu-v1.3.4-x86.apk
 cd ..\..\..\..
 
 echo.
 echo 文件已保存到 release-apks 目录:
-echo - MeowBiu-v1.2.8-arm64-v8a.apk
-echo - MeowBiu-v1.2.8-armeabi-v7a.apk
-echo - MeowBiu-v1.2.8-x86_64.apk
-echo - MeowBiu-v1.2.8-x86.apk
+echo - MeowBiu-v1.3.4-arm64-v8a.apk
+echo - MeowBiu-v1.3.4-armeabi-v7a.apk
+echo - MeowBiu-v1.3.4-x86_64.apk
+echo - MeowBiu-v1.3.4-x86.apk
 echo.
 echo 构建完成! 
