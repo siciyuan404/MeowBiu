@@ -2,8 +2,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // 备选仓库
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 
