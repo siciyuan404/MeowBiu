@@ -340,7 +340,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => Center(child: Text('加载失败: $error')),
+      error: (error, stackTrace) {
+        debugPrint('加载分类失败: $error\n$stackTrace');
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 8),
+                Text(
+                  '加载失败',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$error',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(categoriesProvider),
+                  child: const Text('重试'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
 
     // 自定义底部工具栏

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/cat_sound.dart';
 import '../models/sound_category.dart';
@@ -61,13 +63,25 @@ class PlaybackState {
 // 播放状态提供者
 class PlaybackNotifier extends StateNotifier<PlaybackState> {
   PlaybackNotifier() : super(PlaybackState());
-  
+
   final AudioService _audioService = AudioService();
-  
+  // 保存流订阅,避免泄漏
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+
+  // 取消旧订阅
+  void _cancelSubscriptions() {
+    _positionSub?.cancel();
+    _positionSub = null;
+    _durationSub?.cancel();
+    _durationSub = null;
+  }
+
   // 添加重置特定音频的状态方法
   void resetState(String soundId) {
     if (state.playingId == soundId) {
       // 完全重置状态，包括进度条、按钮状态和秒数
+      _cancelSubscriptions();
       state = PlaybackState(
         playingId: null,
         position: Duration.zero,
@@ -76,40 +90,49 @@ class PlaybackNotifier extends StateNotifier<PlaybackState> {
       );
     }
   }
-  
+
   // 播放音频 - 优化响应速度
   Future<void> playSound(CatSound sound) async {
+    // 取消上一次的订阅,避免累积
+    _cancelSubscriptions();
+
     // 立即更新UI状态，让界面快速响应
     state = PlaybackState(playingId: sound.id, isPlaying: true);
-    
+
     // 异步播放音频
     _audioService.safePlay(sound).then((_) {
+      if (!mounted) return;
       // 播放成功后再次确认状态
       if (state.playingId == sound.id) {
         state = state.copyWith(isPlaying: true);
       }
     }).catchError((error) {
+      if (!mounted) return;
       // 播放失败时重置状态
       if (state.playingId == sound.id) {
+        _cancelSubscriptions();
         state = PlaybackState();
       }
+      debugPrint('播放音频失败: $error');
     });
-    
+
     // 监听播放进度
-    _audioService.getPositionStream(sound.id).listen((position) {
+    _positionSub = _audioService.getPositionStream(sound.id).listen((position) {
+      if (!mounted) return;
       if (state.playingId == sound.id) {
         state = state.copyWith(position: position);
       }
     });
-    
+
     // 监听总时长
-    _audioService.getDurationStream(sound.id).listen((duration) {
+    _durationSub = _audioService.getDurationStream(sound.id).listen((duration) {
+      if (!mounted) return;
       if (state.playingId == sound.id) {
         state = state.copyWith(duration: duration);
       }
     });
   }
-  
+
   // 暂停播放 - 快速响应
   Future<void> pauseSound() async {
     // 立即更新UI状态
@@ -120,15 +143,16 @@ class PlaybackNotifier extends StateNotifier<PlaybackState> {
       await _audioService.pauseCurrentSound();
     }
   }
-  
+
   // 停止播放 - 快速响应
   Future<void> stopSound() async {
     // 立即更新UI状态
+    _cancelSubscriptions();
     state = PlaybackState();
     // 异步执行停止操作
     await _audioService.stopCurrentSound();
   }
-  
+
   // 继续播放 - 确保状态正确更新
   Future<void> resumeSound() async {
     // 立即更新UI状态
@@ -136,20 +160,24 @@ class PlaybackNotifier extends StateNotifier<PlaybackState> {
     if (currentId != null) {
       // 显式设置isPlaying为true以确保状态更新
       state = state.copyWith(isPlaying: true);
-      
+
       // 异步执行继续播放操作
       await _audioService.resumeSound();
-      
+
       // 确保状态在操作完成后仍然正确
+      if (!mounted) return;
       if (state.playingId == currentId) {
         state = state.copyWith(isPlaying: true);
       }
     }
   }
-  
+
   // 清理资源
+  @override
   void dispose() {
-    _audioService.dispose();
+    _cancelSubscriptions();
+    // 注意:AudioService 是全局单例,不应在 Notifier dispose 时销毁
+    // 否则 hot reload 或 provider 重建会影响其他使用方
     super.dispose();
   }
 }

@@ -123,7 +123,7 @@ class AudioService {
         }
       }
       
-      sound.incrementPlayCount();
+      sound.incrementPlayCount(); // 异步保存,fire-and-forget
       
     } catch (e) {
       debugPrint('播放音频失败: $e');
@@ -172,10 +172,10 @@ class AudioService {
       
       // 检查文件是否已存在
       if (await File(filePath).exists()) {
-        sound.updateCache(filePath);
+        await sound.updateCache(filePath);
         return filePath;
       }
-      
+
       // 下载文件
       final response = await _dio.download(
         sound.audioPath,
@@ -186,9 +186,9 @@ class AudioService {
           }
         }
       );
-      
+
       if (response.statusCode == 200) {
-        sound.updateCache(filePath);
+        await sound.updateCache(filePath);
         return filePath;
       }
       
@@ -210,7 +210,7 @@ class AudioService {
       if (await file.exists()) {
         await file.delete();
       }
-      sound.clearCache();
+      await sound.clearCache();
       return true;
     } catch (e) {
       debugPrint('清理缓存失败: $e');

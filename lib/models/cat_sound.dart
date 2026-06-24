@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 part 'cat_sound.g.dart';
@@ -29,10 +30,10 @@ class CatSound extends HiveObject {
 
   @HiveField(6)
   DateTime lastPlayed;
-  
+
   @HiveField(7, defaultValue: false)
   bool isFavorite;
-  
+
   @HiveField(8)
   int? durationMs;
 
@@ -50,33 +51,42 @@ class CatSound extends HiveObject {
 
   bool get isNetworkSource => sourceType == AudioSourceType.network;
   bool get isCached => cachedPath != null;
-  
+
   Duration get duration => Duration(milliseconds: durationMs ?? 0);
-  
-  void incrementPlayCount() {
+
+  // 安全保存,避免未 await 导致内存与磁盘不一致
+  Future<void> _safeSave() async {
+    try {
+      await save();
+    } catch (e) {
+      debugPrint('CatSound 保存失败: $e');
+    }
+  }
+
+  Future<void> incrementPlayCount() async {
     playCount++;
     lastPlayed = DateTime.now();
-    save();
+    await _safeSave();
   }
-  
-  void updateCache(String path) {
+
+  Future<void> updateCache(String path) async {
     cachedPath = path;
-    save();
+    await _safeSave();
   }
-  
-  void clearCache() {
+
+  Future<void> clearCache() async {
     cachedPath = null;
-    save();
+    await _safeSave();
   }
-  
-  void toggleFavorite() {
+
+  Future<void> toggleFavorite() async {
     isFavorite = !isFavorite;
-    save();
+    await _safeSave();
   }
-  
-  void updateDuration(Duration duration) {
+
+  Future<void> updateDuration(Duration duration) async {
     durationMs = duration.inMilliseconds;
-    save();
+    await _safeSave();
   }
 }
 

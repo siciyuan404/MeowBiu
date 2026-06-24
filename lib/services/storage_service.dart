@@ -19,17 +19,29 @@ class StorageService {
   late Box<SoundCategory> _categoriesBox;
   
   bool _isInitialized = false;
+  // 使用 Completer 保证初始化只执行一次,避免并发竞态
+  Completer<void>? _initCompleter;
   final Uuid _uuid = const Uuid();
-  
+
   // 初始化Hive数据库
   Future<void> init() async {
     if (_isInitialized) return;
-    
+    // 如果正在初始化,等待完成
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+    _initCompleter = Completer<void>();
+
     try {
       // 初始化Hive
-      final appDocDir = await getApplicationDocumentsDirectory();
+      // path_provider 的平台通道在应用启动早期可能尚未就绪,重试几次以提高健壮性
+      final appDocDir = await _withRetry(
+        () => getApplicationDocumentsDirectory(),
+        maxAttempts: 3,
+        delay: const Duration(milliseconds: 200),
+      );
       await Hive.initFlutter(appDocDir.path);
-      
+
       // 注册适配器
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(CatSoundAdapter());
@@ -40,19 +52,57 @@ class StorageService {
       if (!Hive.isAdapterRegistered(2)) {
         Hive.registerAdapter(AudioSourceTypeAdapter());
       }
-      
-      // 打开盒子
-      _soundsBox = await Hive.openBox<CatSound>(_soundsBoxName);
-      _categoriesBox = await Hive.openBox<SoundCategory>(_categoriesBoxName);
-      
+
+      // 打开盒子,若数据损坏则尝试删除后重建
+      _soundsBox = await _openBoxSafely<CatSound>(_soundsBoxName);
+      _categoriesBox =
+          await _openBoxSafely<SoundCategory>(_categoriesBoxName);
+
       // 检查并初始化默认数据
       await _initDefaultData();
-      
+
       _isInitialized = true;
+      _initCompleter!.complete();
       debugPrint('存储服务初始化成功');
     } catch (e) {
       debugPrint('存储服务初始化失败: $e');
+      _initCompleter!.completeError(e);
+      _initCompleter = null;
       rethrow;
+    }
+  }
+
+  // 带重试的异步操作
+  Future<T> _withRetry<T>(
+    Future<T> Function() action, {
+    required int maxAttempts,
+    required Duration delay,
+  }) async {
+    int attempt = 0;
+    dynamic lastError;
+    while (attempt < maxAttempts) {
+      try {
+        return await action();
+      } catch (e) {
+        lastError = e;
+        attempt++;
+        debugPrint('操作失败(第 $attempt/$maxAttempts 次): $e');
+        if (attempt < maxAttempts) {
+          await Future.delayed(delay);
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  // 安全打开 Hive Box,若打开失败(数据损坏等)则删除后重建
+  Future<Box<T>> _openBoxSafely<T>(String name) async {
+    try {
+      return await Hive.openBox<T>(name);
+    } catch (e) {
+      debugPrint('打开 Box($name) 失败,尝试清理后重建: $e');
+      await Hive.deleteBoxFromDisk(name);
+      return await Hive.openBox<T>(name);
     }
   }
   
@@ -131,16 +181,15 @@ class StorageService {
   
   // 删除猫声
   Future<void> deleteSound(String soundId) async {
-    // 从所有分类中移除
+    // 先删除猫声本身
+    await _soundsBox.delete(soundId);
+    // 再从所有分类中移除引用,避免孤儿引用
     for (var category in _categoriesBox.values) {
       if (category.soundIds.contains(soundId)) {
         category.removeSound(soundId);
         await _categoriesBox.put(category.id, category);
       }
     }
-    
-    // 删除猫声
-    await _soundsBox.delete(soundId);
   }
   
   // 添加新分类
@@ -168,8 +217,17 @@ class StorageService {
     await _categoriesBox.put(category.id, category);
   }
   
-  // 删除分类
+  // 删除分类及其关联的猫声(与 UI 提示一致)
   Future<void> deleteCategory(String categoryId) async {
+    final category = _categoriesBox.get(categoryId);
+    if (category == null) return;
+
+    // 先删除该分类下的所有猫声
+    for (final soundId in category.soundIds.toList()) {
+      await _soundsBox.delete(soundId);
+    }
+
+    // 再删除分类本身
     await _categoriesBox.delete(categoryId);
   }
   

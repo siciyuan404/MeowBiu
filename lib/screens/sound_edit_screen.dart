@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
@@ -51,18 +52,21 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
   bool _isPreviewReady = false;
-  
+  // 保存流订阅,避免泄漏
+  StreamSubscription? _playerStateSub;
+  StreamSubscription? _positionSub;
+
   // 裁切模式：精确 vs 快速
   bool _preciseTrim = false;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // 如果是编辑模式，填充已有数据
     if (widget.sound != null) {
       _nameController.text = widget.sound!.name;
-      
+
       if (widget.sound!.sourceType == AudioSourceType.local) {
         _source = AudioSource.localFile;
         _localFilePath = widget.sound!.audioPath;
@@ -71,35 +75,35 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         _urlController.text = widget.sound!.audioPath;
       }
     }
-    
+
     // 监听播放状态
-    _audioPlayer.playerStateStream.listen((state) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = state.playing;
-        });
-        
-        // 播放完成后自动停止
-        if (state.processingState == ProcessingState.completed) {
-          _audioPlayer.stop();
-          _audioPlayer.seek(Duration(milliseconds: (_trimStart * 1000).toInt()));
-        }
+    _playerStateSub = _audioPlayer.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = state.playing;
+      });
+
+      // 播放完成后自动停止
+      if (state.processingState == ProcessingState.completed) {
+        _audioPlayer.stop();
+        _audioPlayer.seek(Duration(milliseconds: (_trimStart * 1000).toInt()));
       }
     });
-    
+
     // 监听位置用于预览
-    _audioPlayer.positionStream.listen((position) {
-      if (mounted && _isPlaying) {
-        // 如果播放超出裁切范围，自动停止
-        if (position.inMilliseconds / 1000 >= _trimEnd) {
-          _audioPlayer.stop();
-        }
+    _positionSub = _audioPlayer.positionStream.listen((position) {
+      if (!mounted || !_isPlaying) return;
+      // 如果播放超出裁切范围，自动停止
+      if (position.inMilliseconds / 1000 >= _trimEnd) {
+        _audioPlayer.stop();
       }
     });
   }
-  
+
   @override
   void dispose() {
+    _playerStateSub?.cancel();
+    _positionSub?.cancel();
     _nameController.dispose();
     _urlController.dispose();
     _audioPlayer.dispose();

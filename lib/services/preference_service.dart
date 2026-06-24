@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -32,13 +33,24 @@ class PreferenceService {
   static const String _lastCheckUpdateTimeKey = 'last_check_update_time';
 
   static SharedPreferences? _prefs;
-  static bool _initialized = false;
+  // 使用 Completer 保证初始化只执行一次,避免并发竞态
+  static Completer<void>? _initCompleter;
 
   /// 初始化
   Future<void> init() async {
-    if (_initialized) return;
-    _prefs = await SharedPreferences.getInstance();
-    _initialized = true;
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+    _initCompleter = Completer<void>();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      _initCompleter!.complete();
+    } catch (e) {
+      _initCompleter!.completeError(e);
+      _initCompleter = null;
+      rethrow;
+    }
+    return _initCompleter!.future;
   }
 
   /// 是否启用自动更新
@@ -117,7 +129,7 @@ class PreferenceService {
 
   /// 确保已初始化
   void _ensureInitialized() {
-    if (!_initialized) {
+    if (_initCompleter == null || !_initCompleter!.isCompleted) {
       throw StateError('PreferenceService未初始化，请先调用init()方法');
     }
   }
