@@ -153,3 +153,7 @@ flutter:
 
   # 本地化配置
   generate: true
+
+# 强制覆盖依赖版本以修复兼容性问题
+dependency_overrides:
+  path_provider_platform_interface: ^2.2.0
