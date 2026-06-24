@@ -37,8 +37,8 @@ class StorageService {
       // path_provider 的平台通道在应用启动早期可能尚未就绪,重试几次以提高健壮性
       final appDocDir = await _withRetry(
         () => getApplicationDocumentsDirectory(),
-        maxAttempts: 3,
-        delay: const Duration(milliseconds: 200),
+        maxAttempts: 5,
+        delay: const Duration(milliseconds: 500),
       );
       await Hive.initFlutter(appDocDir.path);
 
@@ -64,8 +64,8 @@ class StorageService {
       _isInitialized = true;
       _initCompleter!.complete();
       debugPrint('存储服务初始化成功');
-    } catch (e) {
-      debugPrint('存储服务初始化失败: $e');
+    } catch (e, stack) {
+      debugPrint('存储服务初始化失败: $e\n$stack');
       _initCompleter!.completeError(e);
       _initCompleter = null;
       rethrow;
@@ -101,7 +101,12 @@ class StorageService {
       return await Hive.openBox<T>(name);
     } catch (e) {
       debugPrint('打开 Box($name) 失败,尝试清理后重建: $e');
-      await Hive.deleteBoxFromDisk(name);
+      try {
+        await Hive.deleteBoxFromDisk(name);
+      } catch (deleteError) {
+        debugPrint('清理 Box($name) 磁盘文件失败: $deleteError');
+        // 即使删除失败也尝试打开,可能文件已损坏但 Hive 能处理
+      }
       return await Hive.openBox<T>(name);
     }
   }
@@ -166,8 +171,7 @@ class StorageService {
     if (categoryId != null) {
       final category = _categoriesBox.get(categoryId);
       if (category != null) {
-        category.addSound(sound.id);
-        await _categoriesBox.put(categoryId, category);
+        await category.addSound(sound.id);
       }
     }
     
@@ -186,8 +190,7 @@ class StorageService {
     // 再从所有分类中移除引用,避免孤儿引用
     for (var category in _categoriesBox.values) {
       if (category.soundIds.contains(soundId)) {
-        category.removeSound(soundId);
-        await _categoriesBox.put(category.id, category);
+        await category.removeSound(soundId);
       }
     }
   }

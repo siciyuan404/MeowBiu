@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 part 'sound_category.g.dart';
@@ -23,23 +24,23 @@ class SoundCategory extends HiveObject {
     this.order = 0,
   }) : soundIds = soundIds ?? [];
 
-  void addSound(String soundId) {
+  Future<void> addSound(String soundId) async {
     if (!soundIds.contains(soundId)) {
       soundIds.add(soundId);
-      save();
+      await save();
     }
   }
 
-  void removeSound(String soundId) {
+  Future<void> removeSound(String soundId) async {
     soundIds.remove(soundId);
-    save();
+    await save();
   }
 
-  void reorderSounds(List<String> newOrder) {
+  Future<void> reorderSounds(List<String> newOrder) async {
     assert(newOrder.length == soundIds.length, '新排序列表长度必须与原列表相同');
     assert(newOrder.toSet().length == soundIds.length, '新排序列表不能有重复元素');
     
     soundIds = newOrder;
-    save();
+    await save();
   }
 } 
