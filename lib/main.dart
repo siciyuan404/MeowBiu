@@ -5,13 +5,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'screens/home_screen.dart';
 import 'services/preference_service.dart';
+import 'services/storage_service.dart';
 import 'services/update_service.dart';
 import 'widgets/update_dialog.dart';
 import 'models/release.dart';
 import 'providers/locale_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 等待 Flutter 引擎 JNI 绑定就绪,避免 "No JNI instance is available" 错误
+  // path_provider 等插件依赖 JNI 通道,在引擎完全初始化前调用会失败
+  await Future.delayed(const Duration(milliseconds: 100));
+
+  // 在 runApp 前初始化核心服务,确保 UI 构建时数据已就绪
+  try {
+    await StorageService().init();
+  } catch (e) {
+    debugPrint('存储服务预初始化失败(将在 UI 层重试): $e');
+  }
+
+  try {
+    await PreferenceService().init();
+  } catch (e) {
+    debugPrint('偏好服务预初始化失败: $e');
+  }
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -30,11 +49,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Future<void> _initApp() async {
-    // 初始化偏好设置服务
-    final prefService = PreferenceService();
-    await prefService.init();
-    
-    // 检查是否需要自动更新
+    // 核心服务已在 main() 中预初始化,这里只检查更新
     _checkForUpdates();
   }
 
