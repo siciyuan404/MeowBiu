@@ -38,15 +38,6 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
-
-            // 启用 R8 代码压缩,但保留 path_provider 等 Pigeon 生成的类
-            // 否则 Pigeon 生成的 PathProviderApi 会被剥离,导致 "No JNI instance is available"
-            isMinifyEnabled = true
-            isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 }

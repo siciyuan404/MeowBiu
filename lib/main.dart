@@ -15,9 +15,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 在 runApp 前预初始化核心服务,确保 UI 构建时数据已就绪
-  // 注意:不需要延迟等待 JNI,因为插件注册在 FlutterEngine 启动时就完成
-  // 如果插件注册失败(被 GeneratedPluginRegistrant 的 try-catch 静默吞掉),
-  // 延迟和重试都无效——根本修复在 proguard-rules.pro 中保留 Pigeon 类
   try {
     await StorageService().init();
   } catch (e) {
