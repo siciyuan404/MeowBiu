@@ -14,11 +14,10 @@ import 'providers/locale_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 等待 Flutter 引擎 JNI 绑定就绪,避免 "No JNI instance is available" 错误
-  // path_provider 等插件依赖 JNI 通道,在引擎完全初始化前调用会失败
-  await Future.delayed(const Duration(milliseconds: 100));
-
-  // 在 runApp 前初始化核心服务,确保 UI 构建时数据已就绪
+  // 在 runApp 前预初始化核心服务,确保 UI 构建时数据已就绪
+  // 注意:不需要延迟等待 JNI,因为插件注册在 FlutterEngine 启动时就完成
+  // 如果插件注册失败(被 GeneratedPluginRegistrant 的 try-catch 静默吞掉),
+  // 延迟和重试都无效——根本修复在 proguard-rules.pro 中保留 Pigeon 类
   try {
     await StorageService().init();
   } catch (e) {
