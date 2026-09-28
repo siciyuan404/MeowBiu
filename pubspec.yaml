@@ -46,6 +46,7 @@ dependencies:
   audioplayers: ^5.2.0
   just_audio: ^0.10.0
   ffmpeg_kit_flutter_new_audio: ^2.0.0  # 音频裁切和提取功能
+  just_waveform: ^0.0.5  # 真实音频波形生成（Android/iOS）
   
   # 状态管理
   flutter_riverpod: ^2.4.0

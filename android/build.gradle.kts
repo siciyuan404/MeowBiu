@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // 国内镜像加速，拉取失败时回退到官方源
+        maven("https://maven.aliyun.com/repository/google")
+        maven("https://maven.aliyun.com/repository/central")
         google()
         mavenCentral()
     }

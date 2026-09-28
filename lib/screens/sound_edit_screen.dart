@@ -59,6 +59,9 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
   // 裁切模式：精确 vs 快速
   bool _preciseTrim = false;
 
+  // 是否请求取消当前处理（用于区分用户取消与处理失败）
+  bool _cancelRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -157,12 +160,12 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _trimEnd = 0;
         });
         
-        // 获取视频时长
+        // 获取视频时长（getMediaDuration 返回毫秒，这里转为秒）
         final duration = await AudioEditorService.getMediaDuration(file.path);
         if (duration != null && mounted) {
           setState(() {
-            _totalDuration = duration;
-            _trimEnd = duration;
+            _totalDuration = duration / 1000;
+            _trimEnd = _totalDuration;
           });
         }
         
@@ -233,6 +236,20 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
     await _audioPlayer.stop();
   }
   
+  /// 取消当前处理任务（裁切/提取）
+  Future<void> _cancelProcessing() async {
+    setState(() {
+      _cancelRequested = true;
+    });
+    await AudioEditorService.cancelCurrent();
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+        _processingProgress = 0;
+      });
+    }
+  }
+
   /// 从视频提取音频
   Future<void> _extractAudioFromVideo() async {
     if (_localFilePath == null) return;
@@ -242,24 +259,36 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
       );
       return;
     }
-    
+
     setState(() {
       _isProcessing = true;
       _processingProgress = 0;
+      _cancelRequested = false;
     });
-    
+
     try {
       final result = await AudioEditorService.extractAudioFromVideo(
         videoPath: _localFilePath!,
         startTime: _trimStart,
         duration: _trimEnd - _trimStart,
+        precise: _preciseTrim,
         onProgress: (progress) {
           if (mounted) {
             setState(() => _processingProgress = progress);
           }
         },
+        onError: (msg) {
+          if (mounted && !_cancelRequested) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('提取失败: $msg'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
       );
-      
+
       if (result != null && mounted) {
         setState(() {
           _localFilePath = result;
@@ -268,14 +297,14 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _trimEnd = _totalDuration;
         });
         await _loadAudioDuration(result);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('音频提取成功!'),
             backgroundColor: Colors.green,
           ),
         );
-      } else if (mounted) {
+      } else if (mounted && !_cancelRequested) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('音频提取失败'),
@@ -284,7 +313,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_cancelRequested) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('提取失败: $e')),
         );
@@ -308,24 +337,36 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
       );
       return;
     }
-    
+
     setState(() {
       _isProcessing = true;
       _processingProgress = 0;
+      _cancelRequested = false;
     });
-    
+
     try {
       final result = await AudioEditorService.trimAudio(
         audioPath: _localFilePath!,
         startTime: _trimStart,
         duration: _trimEnd - _trimStart,
+        precise: _preciseTrim,
         onProgress: (progress) {
           if (mounted) {
             setState(() => _processingProgress = progress);
           }
         },
+        onError: (msg) {
+          if (mounted && !_cancelRequested) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('裁切失败: $msg'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
       );
-      
+
       if (result != null && mounted) {
         setState(() {
           _localFilePath = result;
@@ -333,14 +374,14 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           _trimEnd = _totalDuration;
         });
         await _loadAudioDuration(result);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('音频裁切成功!'),
             backgroundColor: Colors.green,
           ),
         );
-      } else if (mounted) {
+      } else if (mounted && !_cancelRequested) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('音频裁切失败'),
@@ -349,7 +390,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_cancelRequested) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('裁切失败: $e')),
         );
@@ -396,8 +437,8 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
           break;
         case 'middle':
           final center = _totalDuration / 2;
-          _trimStart = (center - 2.5).clamp(0, _totalDuration);
-          _trimEnd = (center + 2.5).clamp(0, _totalDuration);
+          _trimStart = (center - 2.5).clamp(0, _totalDuration).toDouble();
+          _trimEnd = (center + 2.5).clamp(0, _totalDuration).toDouble();
           break;
       }
     });
@@ -664,6 +705,12 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
                           '${(_processingProgress * 100).toInt()}%',
                           style: const TextStyle(color: Colors.grey),
                         ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: _cancelProcessing,
+                          icon: const Icon(Icons.close),
+                          label: const Text('取消'),
+                        ),
                       ],
                     ),
                   ),
@@ -913,7 +960,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
                 setState(() {
                   _trimStart = value;
                   if (_trimEnd <= _trimStart) {
-                    _trimEnd = (_trimStart + 1).clamp(0, _totalDuration);
+                    _trimEnd = (_trimStart + 1).clamp(0, _totalDuration).toDouble();
                   }
                 });
               },
@@ -930,7 +977,7 @@ class _SoundEditScreenState extends ConsumerState<SoundEditScreen> {
                 setState(() {
                   _trimEnd = value;
                   if (_trimEnd <= _trimStart) {
-                    _trimStart = (_trimEnd - 1).clamp(0, _totalDuration);
+                    _trimStart = (_trimEnd - 1).clamp(0, _totalDuration).toDouble();
                   }
                 });
               },
