@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 动态（信息流）导航图标：三个圆点 + 三条圆角横条 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g fill="#000000">
+    <circle cx="192" cy="256" r="64"/>
+    <rect x="320" y="192" width="512" height="128" rx="64"/>
+    <circle cx="192" cy="512" r="64"/>
+    <rect x="320" y="448" width="512" height="128" rx="64"/>
+    <circle cx="192" cy="768" r="64"/>
+    <rect x="320" y="704" width="384" height="128" rx="64"/>
+  </g>
+</svg>

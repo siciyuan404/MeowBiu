@@ -14,6 +14,7 @@ import '../widgets/category_edit_dialog.dart';
 import '../widgets/settings_drawer.dart';
 import 'about_screen.dart';
 import 'storage_settings_screen.dart';
+import 'feed_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -24,7 +25,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final int _currentNavIndex = 0; // 当前选中的底部导航索引
+  int _currentNavIndex = 0; // 当前选中的底部导航索引：0=首页 1=动态
 
   // 显示添加猫声页面
   Future<void> _showAddSoundDialog(String categoryId) async {
@@ -254,39 +255,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final selectedCategory = ref.watch(selectedCategoryProvider);
 
-    // 创建AppBar - 聊天风格的顶部栏
-    final appBar = AppBar(
-      scrolledUnderElevation: 0,
-      toolbarHeight: 160, 
-      backgroundColor: const Color(0xFFF9F9F9),
-      title: const Text(
-        '喵语',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 90),
-      ),
-      centerTitle: false,
-      titleSpacing: 20, // 调整标题左侧间距
-      // 5. 修改设置图标的大小和位置
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 20), // 调整右侧边距
-          child: IconButton(
-            icon: SvgPicture.asset(
-              'assets/images/icon_settings_gear.svg',
-              height: 90, // 修改图标大小
-              colorFilter: ColorFilter.mode(
-                colorScheme.onSurface,
-                BlendMode.srcIn,
-              ),
+    // 创建AppBar - 首页显示"喵语"大标题，动态页显示"动态"标题
+    final appBar = _currentNavIndex == 0
+        ? AppBar(
+            scrolledUnderElevation: 0,
+            toolbarHeight: 160,
+            backgroundColor: const Color(0xFFF9F9F9),
+            title: const Text(
+              '喵语',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 90),
             ),
-            tooltip: '设置',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              _scaffoldKey.currentState?.openEndDrawer();
-            },
-          ),
-        ),
-      ],
-    );
+            centerTitle: false,
+            titleSpacing: 20, // 调整标题左侧间距
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 20), // 调整右侧边距
+                child: IconButton(
+                  icon: SvgPicture.asset(
+                    'assets/images/icon_settings_gear.svg',
+                    height: 90, // 修改图标大小
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                  tooltip: '设置',
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    _scaffoldKey.currentState?.openEndDrawer();
+                  },
+                ),
+              ),
+            ],
+          )
+        : AppBar(
+            scrolledUnderElevation: 0,
+            backgroundColor: const Color(0xFFF9F9F9),
+            title: const Text(
+              '动态',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26),
+            ),
+            centerTitle: false,
+            titleSpacing: 20,
+          );
 
     // 构建主体内容
     final bodyContent = categoriesAsync.when(
@@ -372,63 +383,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       },
     );
 
-    // 自定义底部工具栏
+    // 页面主体：首页与动态页通过 IndexedStack 切换，保持各页状态
+    // 底部预留空间，避免内容被凸起的添加按钮遮挡
+    final body = Padding(
+      padding: const EdgeInsets.only(bottom: 36),
+      child: IndexedStack(
+        index: _currentNavIndex,
+        children: [
+          bodyContent,
+          const FeedScreen(),
+        ],
+      ),
+    );
+
+    // 自定义底部导航栏：首页 / 添加(中部凸起) / 动态
     final customBottomBar = Container(
-      height: 70,
+      height: 72,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -1),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          // 左侧猫头按钮
-          SvgPicture.asset(
-            'assets/images/icon_nav_cat.svg',
-            height: 28,
-            colorFilter: ColorFilter.mode(colorScheme.primary, BlendMode.srcIn),
-          ),
-
-          // 中间添加按钮
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: SvgPicture.asset(
-                'assets/images/icon_add_bottom.svg',
-                height: 28,
-                colorFilter: const ColorFilter.mode(
-                  Colors.white,
-                  BlendMode.srcIn,
+          // 两端导航项（中间为凸起按钮让位）
+          Row(
+            children: [
+              Expanded(
+                child: _buildNavItem(
+                  selected: _currentNavIndex == 0,
+                  iconAsset: 'assets/images/icon_nav_cat.svg',
+                  label: '首页',
+                  onTap: () => setState(() => _currentNavIndex = 0),
                 ),
               ),
-              onPressed: () {
-                final selectedCategory = ref.watch(selectedCategoryProvider);
-                if (selectedCategory != null) {
-                  _showAddSoundDialog(selectedCategory);
-                }
-              },
-            ),
+              const SizedBox(width: 72),
+              Expanded(
+                child: _buildNavItem(
+                  selected: _currentNavIndex == 1,
+                  iconAsset: 'assets/images/icon_nav_dynamic.svg',
+                  label: '动态',
+                  onTap: () => setState(() => _currentNavIndex = 1),
+                ),
+              ),
+            ],
           ),
 
-          // 右侧录音按钮
-          SvgPicture.asset(
-            'assets/images/icon_nav_mic.svg',
-            height: 28,
-            colorFilter: ColorFilter.mode(
-              colorScheme.onSurfaceVariant,
-              BlendMode.srcIn,
-            ),
+          // 中间添加按钮：向上凸起，超出导航栏边缘
+          Positioned(
+            top: -30,
+            child: _buildAddButton(size: 60),
           ),
         ],
       ),
@@ -438,7 +448,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: appBar,
-      body: bodyContent,
+      body: body,
       backgroundColor: const Color(0xFFF9F9F9), // 设置背景色为浅灰色
       bottomNavigationBar: customBottomBar,
       endDrawer: SizedBox(
@@ -452,6 +462,83 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           HapticFeedback.mediumImpact();
         }
       },
+    );
+  }
+
+  // 构建底部导航项（图标 + 文字，选中态高亮）
+  Widget _buildNavItem({
+    required bool selected,
+    required String iconAsset,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SvgPicture.asset(
+              iconAsset,
+              height: 26,
+              colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: color,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建底部中间添加按钮（size 控制直径，凸起时更大更醒目）
+  Widget _buildAddButton({double size = 56}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: SvgPicture.asset(
+          'assets/images/icon_add_bottom.svg',
+          height: 28,
+          colorFilter: const ColorFilter.mode(
+            Colors.white,
+            BlendMode.srcIn,
+          ),
+        ),
+        tooltip: '添加猫声',
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          final selectedCategory = ref.read(selectedCategoryProvider);
+          if (selectedCategory != null) {
+            _showAddSoundDialog(selectedCategory);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('请先在首页选择分类')),
+            );
+          }
+        },
+      ),
     );
   }
 
